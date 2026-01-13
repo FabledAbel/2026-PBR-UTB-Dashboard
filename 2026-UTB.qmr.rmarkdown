@@ -1,0 +1,117 @@
+---
+title: "2026 UTB Season"
+format: dashboard
+theme: darkly
+---
+## Row
+```{r}
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(googlesheets4)
+library(plotly)
+
+# 1. Load Data
+sheet_url <- "[https://docs.google.com/spreadsheets/d/1hx6q_yFV6p0UF8IXgp2eOsckzwPDne_aQdf6LC1gKAM/edit?usp=sharing](https://docs.google.com/spreadsheets/d/1hx6q_yFV6p0UF8IXgp2eOsckzwPDne_aQdf6LC1gKAM/edit?usp=sharing)"
+# We use sheet = 1 or the name of your tab
+riders_df <- read_sheet(sheet_url) 
+
+# 2. Clean, Merge, and Limit to Top 15
+riders_clean <- riders_df %>%
+  filter(!is.na(Rider)) %>% 
+  mutate(Points = as.numeric(as.character(Points))) %>%
+  # Merge Julio or any other duplicates
+  group_by(Rider) %>% 
+  summarise(Points = sum(Points, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  # THE LIMIT: Keep only the 15 riders with the most points
+  slice_max(order_by = Points, n = 15) %>% 
+  # Sort again so the chart builds a nice staircase
+  arrange(Points) 
+# 3. Create the Visual (PBR Gold & Black Style)
+p <- ggplot(riders_clean, aes(x = reorder(Rider, Points), y = Points, fill = Points)) +
+  geom_col() +
+  # This creates the Gold gradient
+  scale_fill_gradient(low = "#C5A059", high = "#FFD700") + 
+  coord_flip() +
+  labs(title = "2026 WORLD STANDINGS", x = NULL, y = "Points") +
+  theme_minimal() +
+  # This makes the background black and the text white/gold
+  theme(
+    plot.background = element_rect(fill = "black", color = "black"),
+    panel.background = element_rect(fill = "black", color = "black"),
+    panel.grid.major = element_line(color = "#333333"), # Darker grid lines
+    panel.grid.minor = element_blank(),
+    text = element_text(color = "#FFD700"), # Gold text
+    axis.text = element_text(color = "white"),
+    title = element_text(face = "bold", size = 14),
+    legend.position = "none"
+  )
+# 4. Show it
+ggplotly(p)
+
+### Top Bull Performance by Event
+
+# Load the "Events" sheet specifically
+events_raw <- read_sheet(sheet_url, sheet = "Events")
+
+bulls_by_event <- events_raw %>%
+  # Match your spreadsheet column names exactly
+  select(Location, Bull_Name, Bull_Score) %>% 
+  filter(!is.na(Bull_Name)) %>%
+  mutate(Bull_Score = as.numeric(Bull_Score)) %>%
+  group_by(Location) %>%
+  # Get the bull with the highest score in each city
+  slice_max(order_by = Bull_Score, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  arrange(desc(Bull_Score))
+
+# 4. Display a stylized table
+library(kableExtra)
+
+bulls_by_event %>%
+  knitr::kable(col.names = c("CITY", "BULL", "SCORE"), align = "lcc") %>%
+  kable_styling(bootstrap_options = c("hover", "condensed")) %>%
+  row_spec(0, bold = TRUE, color = "#FFD700", background = "#1a1a1a") # Gold header
+
+#| message: false
+#| warning: false
+
+# 1. Calculate Bull Standings
+bull_standings <- events_raw %>%
+  select(Bull_Name, Bull_Score) %>% 
+  filter(!is.na(Bull_Name), !is.na(Bull_Score)) %>%
+  mutate(Bull_Score = as.numeric(Bull_Score)) %>%
+  group_by(Bull_Name) %>%
+  # Calculate Average Score and count how many times they bucked (Outs)
+  summarise(
+    Avg_Score = mean(Bull_Score, na.rm = TRUE),
+    Outs = n()
+  ) %>%
+  # Only show bulls with at least 1 out (you can change this to 2 or 3 later)
+  filter(Outs >= 1) %>%
+  slice_max(order_by = Avg_Score, n = 10) %>%
+  arrange(Avg_Score)
+
+# 2. Plot the YETI Standings
+p_bulls <- ggplot(bull_standings, aes(x = reorder(Bull_Name, Avg_Score), y = Avg_Score, fill = Avg_Score)) +
+  geom_col() +
+  scale_fill_gradient(low = "#C5A059", high = "#FFD700") + 
+  coord_flip(ylim = c(40, 46)) + # Zooms in on the "Rank" scores
+  labs(title = "YETI WORLD CHAMPION BULL RACE", x = NULL, y = "Avg Score") +
+  theme_minimal() +
+  theme(
+    plot.background = element_rect(fill = "black"),
+    panel.background = element_rect(fill = "black"),
+    text = element_text(color = "#FFD700"),
+    axis.text = element_text(color = "white")
+  )
+
+ggplotly(p_bulls)
+
+```
+---
+
+## 
+
